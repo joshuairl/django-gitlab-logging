@@ -1,4 +1,4 @@
-from celery import app
+from simplemostmeals.celery import app
 from django.conf import settings
 
 from gitlab_logging.helpers import GitlabIssuesHelper

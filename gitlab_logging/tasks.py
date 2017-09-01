@@ -47,16 +47,16 @@ def task_log_gitlab_issue_reopen(issue_id):
     Proceed the issue re-opening task
     """
     print("Re-opening issue [ID: %s]" % issue_id)
-    
+
     gl = GitlabIssuesHelper.gitlab()
 
     # Update issue with python-gitlab
     issue = gl.project_issues.get(issue_id, project_id=settings.GITLAB_PROJECT_ID)
 
     issue.state_event = 'reopen'
-    success, response = issue.save()
+    response = issue.save()
 
-    if success:
-        print("Issue re-opened [ID: %s]" % issue_id)
+    if response:
+        print("Issue re-opened [ID: %s]" % response.id)
     else:
         print("Issue could not be re-opened [ID: %s]" % issue_id)

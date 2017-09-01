@@ -1,55 +1,60 @@
-from celery import task
+from celery import app
 from django.conf import settings
 
-from helpers import GitlabIssuesHelper
+from gitlab_logging.helpers import GitlabIssuesHelper
 
-
-@task
+@app.task
 def task_log_gitlab_issue_open(issue_title, issue_content, trace_raw):
     """
     Proceed the issue opening task
     """
-    gitlab = GitlabIssuesHelper.gitlab()
+    gl = GitlabIssuesHelper.gitlab()
 
     print("Opening issue: %s..." % issue_title)
+    gitlab_issue_labels = ""
+    gitlab_issue_title_prefix = ""
+    # New Feature: Allows configuration of assigning a
+    # prefix to issues created with this module.
+    if hasattr(settings, 'GITLAB_ISSUE_TITLE_PREFIX'):
+        gitlab_issue_title_prefix = settings.GITLAB_ISSUE_TITLE_PREFIX
 
-    # Create issue
-    success, response = gitlab.createissue(
-        settings.GITLAB_PROJECT_ID,
-        issue_title,
+    issue_title = gitlab_issue_title_prefix + issue_title
 
-        description=issue_content,
-        assignee_id=getattr(settings, 'GITLAB_ASSIGNEE_ID', ''),
-        labels='backend, error, bug',
-    )
+    if hasattr(settings,'GITLAB_ISSUE_LABELS'):
+        gitlab_issue_labels = settings.GITLAB_ISSUE_LABELS
 
-    if success:
-        issue_id = response.get('id', None)
+    # Create issue with python-gitlab
+    response = gl.project_issues.create({
+            'title': issue_title,
+            'description': issue_content,
+            'labels': gitlab_issue_labels
+        }, project_id=settings.GITLAB_PROJECT_ID)
 
-        if issue_id is not None:
+    if response:
+        issue_id = response.id
+
+        if issue_id:
             print("Issue opened: %s [ID: %s]" % (issue_title, issue_id))
 
-            GitlabIssuesHelper.store_issue(trace_raw, settings.GITLAB_PROJECT_ID, response['id'])
+            GitlabIssuesHelper.store_issue(trace_raw, settings.GITLAB_PROJECT_ID, response.id)
     else:
         print("Issue could not be opened: %s" % issue_title)
 
 
-@task
+@app.task
 def task_log_gitlab_issue_reopen(issue_id):
     """
     Proceed the issue re-opening task
     """
     print("Re-opening issue [ID: %s]" % issue_id)
 
-    success, _ = GitlabIssuesHelper.gitlab().editissue(
-        settings.GITLAB_PROJECT_ID,
-        issue_id,
+    # Update issue with python-gitlab
+    issue = gl.project_issues.get(issue_id, project_id=settings.GITLAB_PROJECT_ID)
 
-        state_event='reopen',
-    )
+    issue.state_event = 'reopen'
+    success, response = issue.save()
 
     if success:
         print("Issue re-opened [ID: %s]" % issue_id)
     else:
         print("Issue could not be re-opened [ID: %s]" % issue_id)
-        
